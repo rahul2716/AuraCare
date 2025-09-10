@@ -8,7 +8,7 @@ import datetime
 import speech_recognition as sr
 import google.generativeai as genai
 
-# Configure logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -18,13 +18,11 @@ CORS(app)
 
 # Load Environment Variables
 load_dotenv()
-# --- CHANGED: Using GOOGLE_API_KEY instead of GROQ_API_KEY ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 if not GOOGLE_API_KEY:
     raise ValueError("Missing Google API key in environment variables.")
 
-# In-memory user storage (to replace database)
 users = {}
 user_sessions = {}
 
@@ -73,8 +71,7 @@ def get_llm_response(messages, model="gemini-1.5-flash-latest", temperature=0.8,
             )
         )
         
-        # The Gemini API expects roles to be 'user' and 'model'.
-        # The history already has 'user', but we need to change 'assistant' to 'model'.
+       
         gemini_history = [
             {'role': 'model' if msg['role'] == 'assistant' else 'user', 'parts': [msg['content']]}
             for msg in messages
@@ -93,7 +90,6 @@ def get_llm_response(messages, model="gemini-1.5-flash-latest", temperature=0.8,
         print(f"LLM Error: {str(e)}")
         return "Oops! Something went wrong. Try again later."
 
-# --- UNCHANGED: No modifications needed for auth endpoints ---
 @app.route('/auth/register', methods=['POST'])
 def register():
     data = request.json
@@ -139,7 +135,6 @@ def login():
         logger.error(f"Login error: {str(e)}")
         return jsonify({'error': 'An error occurred during login', 'status': 'error'}), 500
 
-# --- MODIFIED: Chat endpoint call to the new LLM function ---
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json
@@ -159,7 +154,6 @@ def chat():
             "timestamp": current_timestamp
         })
 
-        # We no longer need the system prompt here, as it's handled in get_llm_response
         chat_history = user_sessions[session_id]
 
         # Call the updated Gemini function (no client object needed)
@@ -167,7 +161,7 @@ def chat():
 
         bot_timestamp = get_formatted_timestamp()
         user_sessions[session_id].append({
-            "role": "assistant", # Still use 'assistant' for our internal history
+            "role": "assistant", 
             "content": bot_response,
             "timestamp": bot_timestamp
         })
@@ -183,7 +177,6 @@ def chat():
         logger.error(f"Error in chat endpoint: {str(e)}")
         return jsonify({'error': 'An error occurred processing your message', 'status': 'error'}), 500
 
-# --- UNCHANGED: No modifications needed for other endpoints ---
 @app.route('/speech-to-text', methods=['POST'])
 def speech_to_text():
     try:
