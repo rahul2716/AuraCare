@@ -19,7 +19,27 @@ export default function ChatInterface() {
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scrollToBottom = () => {
+      if (chatEndRef.current) {
+        chatEndRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'end',
+        });
+      }
+    };
+
+    const scrollId = requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+
+    const timeoutId = setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+
+    return () => {
+      cancelAnimationFrame(scrollId);
+      clearTimeout(timeoutId);
+    };
   }, [chatHistory]);
 
   const startChat = () => {
@@ -36,36 +56,49 @@ export default function ChatInterface() {
     startChat();
   }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!message.trim()) return;
-    
-    const userMessage = message;
-    setMessage('');
+  const speakText = (text) => {
+    if ('speechSynthesis' in window) {
+      // Regex to remove emojis from the text before speaking
+      const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+      const cleanText = text.replace(emojiRegex, '');
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      console.error('Speech synthesis not supported in this browser.');
+    }
+  };
+
+  const sendMessage = async (messageText) => {
+    if (!messageText.trim()) return;
+
+    const userMessage = {
+      role: 'user',
+      content: messageText,
+      timestamp: new Date().toISOString(),
+    };
+
+    setChatHistory(prev => [...prev, userMessage]);
     setIsLoading(true);
     setIsTyping(true);
-    
-    setChatHistory(prev => [...prev, {
-      role: 'user',
-      content: userMessage,
-      timestamp: new Date().toISOString()
-    }]);
 
     try {
       const res = await fetch('http://localhost:8080/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage }),
+        body: JSON.stringify({ message: messageText }),
       });
       const data = await res.json();
-      
+
       setTimeout(() => {
         if (data.status === 'success') {
-          setChatHistory(prev => [...prev, {
+          const assistantMessage = {
             role: 'assistant',
             content: data.response,
-            timestamp: data.timestamp || new Date().toISOString()
-          }]);
+            timestamp: data.timestamp || new Date().toISOString(),
+          };
+          setChatHistory(prev => [...prev, assistantMessage]);
+          speakText(data.response);
         }
         setIsTyping(false);
       }, 1500);
@@ -75,6 +108,12 @@ export default function ChatInterface() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    sendMessage(message);
+    setMessage('');
   };
 
   const handleSpeechRecognition = () => {
@@ -92,7 +131,7 @@ export default function ChatInterface() {
       recognition.onstart = () => setIsListening(true);
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        setMessage(prev => prev + (prev ? ' ' : '') + transcript);
+        sendMessage(transcript);
       };
       recognition.onerror = () => {
         alert('🚫 Speech recognition error occurred.');
@@ -256,7 +295,18 @@ export default function ChatInterface() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5, duration: 0.8 }}
       >
-        <div className="chat-history">
+        <div 
+          className="chat-history"
+          style={{
+            height: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch', // For smooth scrolling on iOS
+            scrollBehavior: 'smooth',
+            padding: '20px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#8B5CF6 transparent',
+          }}
+        >
           <AnimatePresence>
             {chatHistory.map((entry, i) => (
               <motion.div
