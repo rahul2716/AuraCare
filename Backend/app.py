@@ -57,7 +57,7 @@ No numbered points—just natural flow 💬
 """
 
 # --- REWRITTEN: Function to use Gemini API ---
-def get_llm_response(messages, model="gemini-1.5-flash-latest", temperature=0.8, top_p=0.9):
+def get_llm_response(messages, model="gemini-2.5-flash-lite", temperature=0.8, top_p=0.9):
     """
     Gets a response from the Google Gemini API.
     """
@@ -87,11 +87,32 @@ def get_llm_response(messages, model="gemini-1.5-flash-latest", temperature=0.8,
         # Send the new user message to the chat session
         response = chat_session.send_message(gemini_history[-1]['parts'][0])
         
-        return response.text.strip()
+        # Check if the response has valid parts before accessing text
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            
+            # Check finish reason
+            if hasattr(candidate, 'finish_reason'):
+                if candidate.finish_reason == 2:  # SAFETY
+                    logger.warning("Response blocked by safety filters")
+                    return "I understand you're reaching out, and I'm here for you. Let's keep our conversation gentle and supportive. How are you feeling right now? 💙"
+                elif candidate.finish_reason == 3:  # RECITATION
+                    logger.warning("Response blocked due to recitation")
+                    return "Let me rephrase that in my own words. I'm here to listen and support you. What's on your mind? 🌿"
+            
+            # Check if there are valid parts with text
+            if hasattr(candidate, 'content') and candidate.content.parts:
+                for part in candidate.content.parts:
+                    if hasattr(part, 'text') and part.text.strip():
+                        return part.text.strip()
+        
+        # Fallback if no valid text is found
+        logger.warning("No valid response text found")
+        return "I'm here to listen and support you. Could you tell me a bit more about what's on your mind? 💛"
         
     except Exception as e:
-        print(f"LLM Error: {str(e)}")
-        return "Oops! Something went wrong. Try again later."
+        logger.error(f"LLM Error: {str(e)}")
+        return "I'm having a moment of technical difficulty, but I'm still here for you. Try sharing again in a moment? 🤗"
 
 # --- UNCHANGED: No modifications needed for auth endpoints ---
 @app.route('/auth/register', methods=['POST'])
