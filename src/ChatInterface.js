@@ -54,8 +54,19 @@ export default function ChatInterface() {
 
   useEffect(() => {
     startChat();
+    
+    // Cleanup speech recognition on unmount
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {
+          // Ignore errors on cleanup
+        }
+        recognitionRef.current = null;
+      }
+    };
   }, []);
-
   const speakText = (text) => {
     if ('speechSynthesis' in window) {
       // Regex to remove emojis from the text before speaking
@@ -121,27 +132,43 @@ export default function ChatInterface() {
       alert('🎤 Speech recognition not supported in this browser.');
       return;
     }
-
+  
+    // If already listening, stop the recognition
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      return;
+    }
+  
+    // Initialize recognition if it doesn't exist
     if (!recognitionRef.current) {
       const recognition = new window.webkitSpeechRecognition();
       recognition.lang = 'en-US';
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
-
+  
       recognition.onstart = () => setIsListening(true);
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         sendMessage(transcript);
       };
-      recognition.onerror = () => {
-        alert('🚫 Speech recognition error occurred.');
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
       };
       recognition.onend = () => setIsListening(false);
-
+  
       recognitionRef.current = recognition;
     }
-
-    recognitionRef.current.start();
+  
+    // Start recognition only if not already listening
+    try {
+      recognitionRef.current.start();
+    } catch (error) {
+      console.error('Failed to start recognition:', error);
+      setIsListening(false);
+    }
   };
 
   return (
@@ -451,3 +478,4 @@ export default function ChatInterface() {
     </motion.div>
   );
 }
+
